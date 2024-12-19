@@ -1,1 +1,1 @@
-# sockets-app-bilal
+# Socket Application For Namaz Application
