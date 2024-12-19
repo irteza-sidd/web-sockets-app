@@ -33,10 +33,10 @@ export const initializeSocket = (server) => {
 const handleConfigUpdate = async (socket, data, field) => {
   const { userId, value } = data;
   try {
-    socket.broadcast.emit(`${field}_updated`, { userId, value });
-    console.log(`${field} updated for user ${userId}: ${value}`);
+    console.log(`Received color update for user ${userId}: ${value}`); // Debugging log
+    socket.emit("selected_color_updated", { userId, value });
 
-    await updateUserConfigInDB(userId, { [field]: value });
+    // await updateUserConfigInDB(userId, { [field]: value });
 
     console.log(`Database updated for ${field} of user ${userId}: ${value}`);
   } catch (error) {
