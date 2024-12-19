@@ -28,3 +28,12 @@ export const updateUserConfigInDB = async (userId, config) => {
     await connection.end();
   }
 };
+
+// CREATE TABLE user_configuration (
+//   id INT AUTO_INCREMENT PRIMARY KEY,
+//   user_id INT NOT NULL,
+//   selected_color VARCHAR(7),
+//   direction VARCHAR(50),
+//   speed INT,
+//   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+// );
