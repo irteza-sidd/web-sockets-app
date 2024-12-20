@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import { updateUserConfigInDB } from "../handlers/configHandler.js";
+
 export const initializeSocket = (server) => {
   const io = new Server(server, {
     cors: {
@@ -13,15 +14,27 @@ export const initializeSocket = (server) => {
     socket.emit("welcome", { message: "Welcome to the Socket.IO server!" });
 
     socket.on("update_color", async (data) => {
-      await handleConfigUpdate(socket, data, "selected_color");
+      await handleConfigUpdate(
+        io,
+        socket,
+        data,
+        "selected_color",
+        "color_updated"
+      );
     });
 
-    socket.on("update_direction", async (data) => {
-      await handleConfigUpdate(socket, data, "direction");
+    socket.on("update_text_direction", async (data) => {
+      await handleConfigUpdate(
+        io,
+        socket,
+        data,
+        "direction",
+        "text_direction_updated"
+      );
     });
 
     socket.on("update_speed", async (data) => {
-      await handleConfigUpdate(socket, data, "speed");
+      await handleConfigUpdate(io, socket, data, "speed", "speed_updated");
     });
 
     socket.on("disconnect", () => {
@@ -30,15 +43,15 @@ export const initializeSocket = (server) => {
   });
 };
 
-const handleConfigUpdate = async (socket, data, field) => {
-  const { userId, value } = data;
+const handleConfigUpdate = async (io, socket, data, field, emitEvent) => {
+  const { customer_id, value } = data;
+
   try {
-    console.log(`Received color update for user ${userId}: ${value}`); // Debugging log
-    socket.emit("selected_color_updated", { userId, value });
+    await updateUserConfigInDB(customer_id, { [field]: value });
 
-    // await updateUserConfigInDB(userId, { [field]: value });
-
-    console.log(`Database updated for ${field} of user ${userId}: ${value}`);
+    const updatePayload = { customer_id, value };
+    io.emit(emitEvent, updatePayload);
+    console.log(`${field} updated for user ${customer_id}: ${value}`);
   } catch (error) {
     console.error(`Error updating ${field}:`, error);
     socket.emit("error", { message: `Failed to update ${field}` });
