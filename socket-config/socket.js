@@ -75,6 +75,43 @@ export const initializeSocket = (server) => {
       );
     });
 
+    // Socket for updating layout direction
+    socket.on("update_layout_direction", async (data) => {
+      const { customer_id, value } = data;
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_layout",
+        { customer_id },
+        { direction: value },
+        "layout_direction_updated"
+      );
+    });
+
+    // Socket for updating prayer correction
+    socket.on("update_prayer_correction", async ({ customer_id, value }) => {
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_prayer_calc",
+        { customer_id },
+        { prayer_correction: JSON.stringify(value) },
+        "prayer_correction_updated"
+      );
+    });
+
+    // Socket for updating prayer correction
+    socket.on("update_iqamah_correction", async ({ customer_id, value }) => {
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_prayer_calc",
+        { customer_id },
+        { prayer_iqamah: JSON.stringify(value) },
+        "iqamah_correction_updated"
+      );
+    });
+
     // Handle disconnection and cleanup
     socket.on("disconnect", () => {
       console.log(`Client disconnected: ${socket.id}`);

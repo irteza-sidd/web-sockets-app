@@ -13,4 +13,15 @@ const db = mysql.createPool({
   queueLimit: 0,
 });
 
+const testConnection = async () => {
+  try {
+    const [rows] = await db.query("SELECT 1");
+    console.log("Database connection successful!");
+  } catch (error) {
+    console.error("Database connection failed:", error);
+  }
+};
+
+testConnection();
+
 export default db;
