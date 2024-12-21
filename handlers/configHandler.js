@@ -1,25 +1,34 @@
-import UserConfiguration from "../models/userConfiguration.js";
+import db from "../config/database.js";
 
-export const updateUserConfigInDB = async (customer_id, config) => {
+export const updateConfigInDB = async (tableName, conditions, updates) => {
   try {
-    const [record, created] = await UserConfiguration.upsert(
-      { customer_id, ...config, updated_at: new Date() },
-      { returning: true }
-    );
+    const updateFields = Object.keys(updates)
+      .map((key) => `${key} = ?`)
+      .join(", ");
 
-    console.log(
-      created
-        ? `New configuration created for user ${customer_id}: ${JSON.stringify(
-            config
-          )}`
-        : `Configuration updated for user ${customer_id}: ${JSON.stringify(
-            config
-          )}`
-    );
+    const conditionFields = Object.keys(conditions)
+      .map((key) => `${key} = ?`)
+      .join(" AND ");
 
-    return record;
+    const query = `
+      UPDATE ${tableName}
+      SET ${updateFields}, updated_at = NOW()
+      WHERE ${conditionFields}
+    `;
+
+    const values = [...Object.values(updates), ...Object.values(conditions)];
+
+    const [result] = await db.query(query, values);
+
+    if (result.affectedRows > 0) {
+      console.log(`Updated ${result.changedRows} row(s) in ${tableName}`);
+      return { success: true, affectedRows: result.changedRows };
+    } else {
+      console.log(`No rows were updated in ${tableName}`);
+      return { success: false, message: "No changes were made" };
+    }
   } catch (error) {
-    console.error("Error updating or creating configuration:", error);
-    throw new Error(`Database operation failed: ${error.message}`);
+    console.error("Error executing raw query:", error);
+    throw new Error(`Failed to update ${tableName}: ${error.message}`);
   }
 };

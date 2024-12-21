@@ -1,8 +1,10 @@
 import { Server } from "socket.io";
-import { updateUserConfigInDB } from "../handlers/configHandler.js";
+import { updateConfigInDB } from "../handlers/configHandler.js";
 
+const userSockets = new Map();
+let io;
 export const initializeSocket = (server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
       origin: "*",
       methods: ["GET", "POST"],
@@ -11,49 +13,114 @@ export const initializeSocket = (server) => {
 
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
-    socket.emit("welcome", { message: "Welcome to the Socket.IO server!" });
 
+    socket.on("register_socket", (data) => {
+      const { customer_id } = data;
+      if (!userSockets.has(customer_id)) {
+        userSockets.set(customer_id, new Set());
+      }
+      userSockets.get(customer_id).add(socket.id);
+      console.log(`User ${customer_id} registered with socket ${socket.id}`);
+    });
+
+    // Socket for updating color
     socket.on("update_color", async (data) => {
+      const { customer_id, value } = data;
       await handleConfigUpdate(
         io,
         socket,
-        data,
-        "selected_color",
+        "customer_layout",
+        { customer_id },
+        { preview_color: value },
         "color_updated"
       );
     });
 
-    socket.on("update_text_direction", async (data) => {
+    // Socket for updating running text
+    socket.on("update_running_text", async (data) => {
+      const { customer_id, value } = data;
       await handleConfigUpdate(
         io,
         socket,
-        data,
-        "direction",
+        "customer_running_text",
+        { customer_id },
+        { text: value },
+        "running_text_updated"
+      );
+    });
+
+    // Socket for updating running text speed
+    socket.on("update_text_duration", async (data) => {
+      const { customer_id, value } = data;
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_running_text",
+        { customer_id },
+        { duration: value },
+        "text_duration_updated"
+      );
+    });
+
+    // Socket for updating running text direction
+    socket.on("update_text_direction", async (data) => {
+      const { customer_id, value } = data;
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_running_text",
+        { customer_id },
+        { direction: value },
         "text_direction_updated"
       );
     });
 
-    socket.on("update_speed", async (data) => {
-      await handleConfigUpdate(io, socket, data, "speed", "speed_updated");
-    });
-
+    // Handle disconnection and cleanup
     socket.on("disconnect", () => {
       console.log(`Client disconnected: ${socket.id}`);
+      for (const [customer_id, sockets] of userSockets) {
+        if (sockets.has(socket.id)) {
+          sockets.delete(socket.id);
+          if (sockets.size === 0) {
+            userSockets.delete(customer_id);
+          }
+          break;
+        }
+      }
     });
   });
 };
 
-const handleConfigUpdate = async (io, socket, data, field, emitEvent) => {
-  const { customer_id, value } = data;
+export { userSockets, io };
 
+// Generic handler for updates
+const handleConfigUpdate = async (
+  io,
+  socket,
+  tableName,
+  conditions,
+  updates,
+  emitEvent
+) => {
   try {
-    await updateUserConfigInDB(customer_id, { [field]: value });
+    const result = await updateConfigInDB(tableName, conditions, updates);
 
-    const updatePayload = { customer_id, value };
-    io.emit(emitEvent, updatePayload);
-    console.log(`${field} updated for user ${customer_id}: ${value}`);
+    const customer_id = conditions.customer_id;
+    const sockets = userSockets.get(customer_id);
+    if (sockets) {
+      const updatePayload = { customer_id, updates };
+      sockets.forEach((socketId) => {
+        io.to(socketId).emit(emitEvent, updatePayload);
+      });
+    }
+
+    console.log(
+      `Configuration updated in table ${tableName} for user ${customer_id}: ${JSON.stringify(
+        updates
+      )}`
+    );
   } catch (error) {
-    console.error(`Error updating ${field}:`, error);
-    socket.emit("error", { message: `Failed to update ${field}` });
+    console.error(`Error updating configuration in table ${tableName}:`, error);
+    socket.emit("error", { message: "Failed to update configuration" });
   }
 };

@@ -1,5 +1,6 @@
 import express from "express";
 import http from "http";
+import "./crons/cronJob.js";
 import { initializeSocket } from "./socket-config/socket.js";
 
 const app = express();
