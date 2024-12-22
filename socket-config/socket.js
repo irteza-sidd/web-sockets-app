@@ -1,5 +1,7 @@
 import { Server } from "socket.io";
 import { updateConfigInDB } from "../handlers/configHandler.js";
+import axios from "axios";
+import moment from "moment";
 
 const userSockets = new Map();
 let io;
@@ -14,12 +16,13 @@ export const initializeSocket = (server) => {
   io.on("connection", (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
-    socket.on("register_socket", (data) => {
+    socket.on("register_socket", async (data) => {
       const { customer_id } = data;
       if (!userSockets.has(customer_id)) {
         userSockets.set(customer_id, new Set());
       }
       userSockets.get(customer_id).add(socket.id);
+      await sendCountdown(customer_id);
       console.log(`User ${customer_id} registered with socket ${socket.id}`);
     });
 
@@ -112,6 +115,40 @@ export const initializeSocket = (server) => {
       );
     });
 
+    //Update Prayer Location
+    socket.on("update_prayer_method", async ({ customer_id, value }) => {
+      const praying_method = {
+        id: value.id || "",
+        name: value.name || "",
+        latlong: value.latlong || "0,0",
+        latitude: value.latitude || "0",
+        longitude: value.longitude || "0",
+      };
+
+      socket.emit("prayer_method_updated", {
+        customer_id,
+        updated_prayer_method: praying_method,
+      });
+    });
+
+    //Update masjid details
+    socket.on("update_masjid_details", async ({ customer_id, value }) => {
+      const { name, logo, address } = value;
+
+      await handleConfigUpdate(
+        io,
+        socket,
+        "customer_devices",
+        { customer_id },
+        {
+          name,
+          logo,
+          address,
+        },
+        "masjid_details_updated"
+      );
+    });
+
     // Handle disconnection and cleanup
     socket.on("disconnect", () => {
       console.log(`Client disconnected: ${socket.id}`);
@@ -160,4 +197,77 @@ const handleConfigUpdate = async (
     console.error(`Error updating configuration in table ${tableName}:`, error);
     socket.emit("error", { message: "Failed to update configuration" });
   }
+};
+
+const fetchPrayerTimings = async (customerId) => {
+  try {
+    const response = await axios.get(
+      `https://app.almuezzin.com/api/customer-data/${customerId}`
+    );
+    const data = response.data;
+
+    const timings = data.timings;
+    const activePrayer = data.activePrayer;
+    const nextPrayerName = data.nextPrayerName;
+
+    return { timings, activePrayer, nextPrayerName };
+  } catch (error) {
+    console.error("Error fetching prayer data:", error);
+    return null;
+  }
+};
+
+const getFormattedTimeRemaining = (nextPrayerTime) => {
+  const now = moment(); // Current time
+  const nextPrayerMoment = moment(nextPrayerTime, "HH:mm");
+
+  const diffInSeconds = nextPrayerMoment.diff(now, "seconds");
+  const hours = Math.floor(diffInSeconds / 3600);
+  const minutes = Math.floor((diffInSeconds % 3600) / 60);
+  const seconds = diffInSeconds % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+    2,
+    "0"
+  )}:${String(seconds).padStart(2, "0")}`;
+};
+
+// Function to send countdown to user
+const sendCountdown = async (customerId) => {
+  const { timings, nextPrayerName } = await fetchPrayerTimings(customerId);
+
+  if (!timings || !nextPrayerName) return;
+
+  const nextPrayerTime = timings[nextPrayerName];
+
+  const interval = setInterval(() => {
+    const formattedTime = getFormattedTimeRemaining(nextPrayerTime);
+    const sockets = userSockets.get(customerId);
+
+    if (sockets) {
+      const updatePayload = {
+        countdown: formattedTime,
+        nextPrayerName,
+      };
+      sockets.forEach((socketId) => {
+        io.to(socketId).emit("countdown", updatePayload);
+      });
+    }
+
+    if (formattedTime === "00:00:00") {
+      clearInterval(interval);
+
+      if (sockets) {
+        sockets.forEach((socketId) => {
+          io.to(socketId).emit("prayer_time_reached", {
+            message: `It's time for ${nextPrayerName} prayer!`,
+            nextPrayerName,
+          });
+        });
+      }
+      setTimeout(async () => {
+        await sendCountdown(customerId);
+      }, 1000);
+    }
+  }, 1000);
 };
