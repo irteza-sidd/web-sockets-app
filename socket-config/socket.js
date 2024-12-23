@@ -22,7 +22,7 @@ export const initializeSocket = (server) => {
         userSockets.set(customer_id, new Set());
       }
       userSockets.get(customer_id).add(socket.id);
-      // await sendCountdown(customer_id);
+      await sendCountdown(customer_id);
       console.log(`User ${customer_id} registered with socket ${socket.id}`);
     });
 
