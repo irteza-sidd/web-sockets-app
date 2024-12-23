@@ -1,5 +1,5 @@
 import moment from "moment";
-import db from "../config/database.js";
+// import db from "../config/database.js";
 import { userSockets } from "../socket-config/socket.js";
 
 const notifiedUsers = new Set();
@@ -13,12 +13,14 @@ const sendEventReminder = async (io) => {
   try {
     const tomorrow = moment().add(1, "days").format("YYYY-MM-DD");
 
-    const [events] = await db.query(
-      `SELECT customer_id, title, event_date 
-       FROM customer_events
-       WHERE event_date = ?`,
-      [tomorrow]
-    );
+    // const [events] = await db.query(
+    //   `SELECT customer_id, title, event_date
+    //    FROM customer_events
+    //    WHERE event_date = ?`,
+    //   [tomorrow]
+    // );
+
+    const events = [];
 
     if (events.length > 0) {
       events.forEach((event) => {
