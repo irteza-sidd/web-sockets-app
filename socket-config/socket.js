@@ -22,13 +22,18 @@ export const initializeSocket = (server) => {
         userSockets.set(customer_id, new Set());
       }
       userSockets.get(customer_id).add(socket.id);
-      await sendCountdown(customer_id);
+      // await sendCountdown(customer_id);
       console.log(`User ${customer_id} registered with socket ${socket.id}`);
     });
 
     // Socket for updating color
     socket.on("update_color", async (data) => {
       const { customer_id, value } = data;
+      await updateConfigInDB(
+        "customer_layout",
+        { customer_id },
+        { preview_color: value }
+      );
       await handleConfigUpdate(
         io,
         socket,
@@ -177,7 +182,9 @@ const handleConfigUpdate = async (
   emitEvent
 ) => {
   try {
-    const result = await updateConfigInDB(tableName, conditions, updates);
+    //For now stop DB updation via sockets
+
+    // const result = await updateConfigInDB(tableName, conditions, updates);
 
     const customer_id = conditions.customer_id;
     const sockets = userSockets.get(customer_id);
