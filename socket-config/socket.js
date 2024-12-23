@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import { updateConfigInDB } from "../handlers/configHandler.js";
 import axios from "axios";
 import fs from "fs";
+import { calculateIqamahDifference } from "./../utils/calculateIqamahDifference.js";
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught Exception:", error);
@@ -285,8 +286,18 @@ const fetchPrayerTimings = async (customerId) => {
     const nextPrayerCountdown = data.nextPrayerCountdown;
     const activePrayer = data.activePrayer;
     const nextPrayerName = data.nextPrayerName;
-
-    return { nextPrayerCountdown, activePrayer, nextPrayerName,timings:data.timings, iqamahTimings :data.iqamahTimings };
+    const iqamahDifference = calculateIqamahDifference(
+      data.timings,
+      data.iqamahTimings,
+      data.nextPrayerName
+    );
+    return {
+      nextPrayerCountdown,
+      activePrayer,
+      nextPrayerName,
+      timings: data.timings,
+      iqamahDifference,
+    };
   } catch (error) {
     console.error("Error fetching prayer data:", error);
     return null;
@@ -295,83 +306,115 @@ const fetchPrayerTimings = async (customerId) => {
 
 // Function to send countdown to user
 const sendCountdown = async (customerId) => {
-  const { nextPrayerCountdown, nextPrayerName, activePrayer, timings, iqamahTimings } =
-    await fetchPrayerTimings(customerId);
+  const {
+    nextPrayerCountdown,
+    nextPrayerName,
+    activePrayer,
+    iqamahDifference,
+  } = await fetchPrayerTimings(customerId);
 
   if (!nextPrayerCountdown || !nextPrayerName) return;
 
   let [hours, minutes, seconds] = nextPrayerCountdown.split(":").map(Number);
 
-  // Get the regular prayer time and iqamah time for the active prayer
-  const prayerTime = timings[activePrayer]; // example: "19:19"
-  const iqamahTime = iqamahTimings[activePrayer]; // example: "19:34"
-
-  // Calculate the difference in minutes between prayer time and iqamah time
-  const [prayerHours, prayerMinutes] = prayerTime.split(":").map(Number);
-  const [iqamahHours, iqamahMinutes] = iqamahTime.split(":").map(Number);
-
-  // Convert prayer and iqamah times into total minutes from midnight
-  const prayerTotalMinutes = prayerHours * 60 + prayerMinutes;
-  const iqamahTotalMinutes = iqamahHours * 60 + iqamahMinutes;
-
-  // Calculate the difference (in minutes) between iqamah time and prayer time
-  const iqamahDelay = iqamahTotalMinutes - prayerTotalMinutes; // example: 15 minutes
-
-  // Convert the next prayer countdown time into total seconds
-  let countdownSeconds = hours * 3600 + minutes * 60 + seconds;
-
   const interval = setInterval(() => {
     const sockets = userSockets.get(customerId);
 
     if (sockets) {
-      if (countdownSeconds > 0) {
-        countdownSeconds--;
-      } 
-      else {
-        const iqamahCountdown = iqamahDelay * 60; 
-        let iqamahCountdownSeconds = iqamahCountdown;
-
-        const iqamahInterval = setInterval(() => {
-          if (iqamahCountdownSeconds > 0) {
-            iqamahCountdownSeconds--;
-          } else {
-            const response = {
-              message: `Iqamah time reached for ${activePrayer} prayer!`,
-              activePrayer: activePrayer,
-              isNavigation: true,
-            };
-
-            sockets.forEach((socketId) => {
-              io.to(socketId).emit("iqamah_time_reached", {
-                customer_id: customerId,
-                response,
-              });
-            });
-
-            clearInterval(iqamahInterval);
-          }
-        }, 1000);
-
-        clearInterval(interval); 
+      if (seconds > 0) {
+        seconds--;
+      } else if (minutes > 0) {
+        minutes--;
+        seconds = 59;
+      } else if (hours > 0) {
+        hours--;
+        minutes = 59;
+        seconds = 59;
       }
-
-      const countdown = `${String(Math.floor(countdownSeconds / 3600)).padStart(2, "0")}:${String(
-        Math.floor((countdownSeconds % 3600) / 60)
-      ).padStart(2, "0")}:${String(countdownSeconds % 60).padStart(2, "0")}`;
-
+      const countdown = `${String(hours).padStart(2, "0")}:${String(
+        minutes
+      ).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
       const response = {
         countdown,
+        activePrayer: activePrayer ? activePrayer : "Isha",
         nextPrayerName,
-        activePrayer,
       };
-
       sockets.forEach((socketId) => {
         io.to(socketId).emit("countdown", {
           customer_id: customerId,
           response,
         });
       });
+
+      if (hours === 0 && minutes === 0 && seconds === 0) {
+        clearInterval(interval);
+        const response = {
+          message: `It's time for ${nextPrayerName} prayer!`,
+          activePrayer: nextPrayerName,
+          isHighLighted: true,
+        };
+        sockets.forEach((socketId) => {
+          io.to(socketId).emit("prayer_time_reached", {
+            customer_id: customerId,
+            response,
+          });
+        });
+        if (!userSockets.get(customerId)?.isCountdownRunning) {
+          startThreeMinuteCountdown(
+            customerId,
+            sockets,
+            nextPrayerName,
+            iqamahDifference
+          );
+        }
+        setTimeout(async () => {
+          await sendCountdown(customerId);
+        }, 1000);
+      }
     }
   }, 1000);
 };
 
+const startThreeMinuteCountdown = (
+  customerId,
+  sockets,
+  nextPrayerName,
+  iqamahDifference
+) => {
+  try {
+    let seconds = iqamahDifference * 60;
+    userSockets.get(customerId).isCountdownRunning = true;
+    const ThreeMinuteInterval = setInterval(() => {
+      if (seconds > 0) {
+        seconds--;
+      }
+      const countdown = `${String(seconds).padStart(2, "0")}`;
+      const response = {
+        countdown,
+        activePrayer: nextPrayerName,
+      };
+      sockets.forEach((socketId) => {
+        io.to(socketId).emit("iqamah_countdown", {
+          customer_id: customerId,
+          response,
+        });
+      });
+
+      if (seconds === 0) {
+        clearInterval(ThreeMinuteInterval);
+        sockets.forEach((socketId) => {
+          io.to(socketId).emit("iqamah_time_reached", {
+            customer_id: customerId,
+            response: {
+              message: `Countdown for ${nextPrayerName} Iqamah has ended.`,
+              isNavigated: true,
+            },
+          });
+        });
+        userSockets.get(customerId).isCountdownRunning = false;
+      }
+    }, 1000);
+  } catch (error) {
+    console.log("error");
+  }
+};
