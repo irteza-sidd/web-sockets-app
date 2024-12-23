@@ -29,11 +29,11 @@ export const initializeSocket = (server) => {
     // Socket for updating color
     socket.on("update_color", async (data) => {
       const { customer_id, value } = data;
-      await updateConfigInDB(
-        "customer_layout",
-        { customer_id },
-        { preview_color: value }
-      );
+      // await updateConfigInDB(
+      //   "customer_layout",
+      //   { customer_id },
+      //   { preview_color: value }
+      // );
       await handleConfigUpdate(
         io,
         socket,
