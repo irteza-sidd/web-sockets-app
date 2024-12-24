@@ -76,7 +76,7 @@ export const initializeSocket = (server) => {
     // Socket for updating running text
     socket.on("update_running_text_config", async (data) => {
       try {
-        const { customer_id, running_texts, direction, duration } = data;
+        const { customer_id, running_texts } = data;
     
         if (!Array.isArray(running_texts)) {
           throw new Error("running_texts must be an array of strings.");
@@ -84,8 +84,6 @@ export const initializeSocket = (server) => {
     
         const updateFields = {
           running_texts,
-          direction,
-          duration,
         };
     
         await handleConfigUpdate(
