@@ -83,7 +83,7 @@ export const initializeSocket = (server) => {
         }
     
         const updateFields = {
-          running_texts,
+          running_text :running_texts,
         };
     
         await handleConfigUpdate(
