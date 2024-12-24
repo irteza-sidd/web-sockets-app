@@ -74,59 +74,35 @@ export const initializeSocket = (server) => {
     });
 
     // Socket for updating running text
-    socket.on("update_running_text", async (data) => {
+    socket.on("update_running_text_config", async (data) => {
       try {
-        const { customer_id, value } = data;
-
+        const { customer_id, running_texts, direction, duration } = data;
+    
+        if (!Array.isArray(running_texts)) {
+          throw new Error("running_texts must be an array of strings.");
+        }
+    
+        const updateFields = {
+          running_texts,
+          direction,
+          duration,
+        };
+    
         await handleConfigUpdate(
           io,
           socket,
           "customer_running_text",
           { customer_id },
-          { text: value },
-          "running_text_updated"
+          updateFields,
+          "running_text_config_updated"
         );
       } catch (error) {
-        console.error("Error updating running text:", error);
-        socket.emit("error", { message: "Failed to update running text" });
+        console.error("Error updating running text configuration:", error);
+        socket.emit("error", { message: "Failed to update running text configuration" });
       }
     });
-
-    // Socket for updating running text speed
-    socket.on("update_text_duration", async (data) => {
-      try {
-        const { customer_id, value } = data;
-        await handleConfigUpdate(
-          io,
-          socket,
-          "customer_running_text",
-          { customer_id },
-          { duration: value },
-          "text_duration_updated"
-        );
-      } catch (error) {
-        console.error("Error updating text duration:", error);
-        socket.emit("error", { message: "Failed to update text duration" });
-      }
-    });
-
-    // Socket for updating running text direction
-    socket.on("update_text_direction", async (data) => {
-      try {
-        const { customer_id, value } = data;
-        await handleConfigUpdate(
-          io,
-          socket,
-          "customer_running_text",
-          { customer_id },
-          { direction: value },
-          "text_direction_updated"
-        );
-      } catch (error) {
-        console.error("Error updating text direction:", error);
-        socket.emit("error", { message: "Failed to update text direction" });
-      }
-    });
+    
+    
 
     // Socket for updating layout direction
     socket.on("update_layout_direction", async (data) => {
